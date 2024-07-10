@@ -17,16 +17,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 @app.post("/register_user", response_description="Add new customer", response_model=CustomerModel)
 async def create_customer(customer: CustomerModel):
-    new_customer = await add_customer(customer)
-    if new_customer:
-        new_customer = jsonable_encoder(new_customer)
+    try:
+        new_customer = await add_customer(customer)
+        if new_customer:
+            new_customer = jsonable_encoder(new_customer)
         
-    return JSONResponse(status_code=201, content=new_customer)
+        return JSONResponse(status_code=201, content=new_customer)
+    except ValueError as e:
+        #Code=400 usuario ci o email ya existe.
+        raise HTTPException(status_code=400, detail=str(e))
 
-@app.post("/login", response_model=dict)
+@app.post("/log_in", response_model=dict)
 async def logIn (Credentials: LogInModel):
     authenticate = await checkData(Credentials)
     response_data = {"authenticated": authenticate}

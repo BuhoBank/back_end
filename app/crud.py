@@ -1,3 +1,4 @@
+
 from .database import customer_collection
 from .models import CustomerModel
 from .models import LogInModel
@@ -5,9 +6,22 @@ from bson import ObjectId
 import bcrypt
 
 async def add_customer(customer_data: CustomerModel) -> dict:
+    # Verificar si el email, CI o usuario ya existe
+    existing_customer = await customer_collection.find_one({
+        "$or": [
+            {"email": customer_data.email},
+            {"ci": customer_data.ci},
+            {"user": customer_data.user}
+        ]
+    })
+    
+    if existing_customer:
+        raise ValueError("El CI, usuario o email ya existe")
+
     # Hashear la contraseña antes de almacenarla
     hashed_password = bcrypt.hashpw(customer_data.password.encode('utf-8'), bcrypt.gensalt())
-   # Convertir el modelo a un diccionario serializable
+    
+    # Convertir el modelo a un diccionario serializable
     customer_dict = customer_data.dict(by_alias=True)
     customer_dict['password'] = hashed_password.decode('utf-8')  # Almacenar la contraseña hasheada
 
@@ -24,21 +38,10 @@ async def add_customer(customer_data: CustomerModel) -> dict:
 
     return new_customer
 
-
-async def checkData(credentials: LogInModel) -> bool:
+async def checkData(customer_data: CustomerModel) -> bool:
     query = {
-        "user": credentials.user
+        "email": customer_data.email,
+        "password": customer_data.password
     }
-    user = await customer_collection.find_one(query)
-    if user is None:
-        print(f"Usuario {credentials.user} no encontrado")
-        return False
-    else:
-        print(f"Usuario {credentials.user} encontrado con exito")
-    
-    hashed_password=user.get('password','')
-    if bcrypt.checkpw(credentials.password.encode('utf-8'), hashed_password.encode('utf-8')):
-        return True
-    else:
-        return False
-    
+    exists = await customer_collection.find_one(query)
+    return exists is not None
