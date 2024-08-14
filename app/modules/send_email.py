@@ -36,6 +36,29 @@ def send_email(subject, html_body, sender, recipients, password):
         return 200, {"code":"DOMAIN_DONT_EXIST"}
     
 
+def send_email_user(subject, html_body, sender, recipients, password):
+    try:
+        domain = parseaddr(recipients)[1].split('@')[-1]
+        dns.resolver.resolve(domain, 'MX')
+        print("DNS OK")
+        msg = MIMEText(html_body, 'html')
+        msg['Subject'] = subject
+        msg['From'] = sender
+        msg['To'] = ', '.join(recipients)
+        try:
+            with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp_server:
+                smtp_server.login(sender, password)
+                res=smtp_server.sendmail(sender, recipients, msg.as_string())
+                print("Message sent!",res)
+            return {"code":"EMAIL_SEND"}
+        except Exception as e:
+            print(f"Error in sent email {e}")
+            return {"code":"EMAIL_DONT_SEND"}
+    except  Exception as e: #(dns.resolver.NoAnswer, dns.resolver.NXDOMAIN):
+        print (f"DOMAIN ERROR {e}")
+        return {"code":"DOMAIN_DONT_EXIST"}
+    
+
 async def save(code,email,collection, parametro):
     if parametro == 0:
         query = {
@@ -43,7 +66,7 @@ async def save(code,email,collection, parametro):
             "code":code,
             "attempts":3,
              "time":datetime.datetime.utcnow(),
-            "expiresAt": datetime.datetime.utcnow() + datetime.timedelta(minutes=1) 
+            "expiresAt": datetime.datetime.utcnow() + datetime.timedelta(minutes=5) 
         }
     elif parametro == 1:
         query = {
@@ -51,7 +74,7 @@ async def save(code,email,collection, parametro):
             "code":code,
             "attempts":3,
             "time":datetime.datetime.utcnow(),
-            "expiresAt": datetime.datetime.utcnow() + datetime.timedelta(minutes=1)  # Hora de expiración
+            "expiresAt": datetime.datetime.utcnow() + datetime.timedelta(minutes=5)  # Hora de expiración
         }
     check,user = await CheckIsRegistered(code, email, collection)
     if not check:
@@ -67,7 +90,7 @@ async def save(code,email,collection, parametro):
                 "code":code,
             "attempts":3,
             "time":datetime.datetime.utcnow(),
-            "expiresAt": datetime.datetime.utcnow() + datetime.timedelta(minutes=1)  # Hora de expiración
+            "expiresAt": datetime.datetime.utcnow() + datetime.timedelta(minutes=5)  # Hora de expiración
             }}
         )
         if update_result.modified_count > 0:
@@ -131,6 +154,28 @@ async def prepare_email(email, parametro):
             status = 200
             response={"code":"EMAIL_DONT_EXIST"}
             return status, response
+    elif parametro==2:
+        checkEmail = await customer_collection.find_one({"email": email})
+        if checkEmail:
+            user_name = checkEmail["user"]
+            subject = "Recuperación de usuario"
+            html_body=f"""
+                <html>
+                    <body>
+                        <h1>Recuperación de usuario</h1>
+                        <p>Su usuario registrado en el sistema es:</p>
+                        <p><strong>{user_name}</strong></p>
+                    </body>
+                </html>
+                """
+            sender = "buhobanco@gmail.com"
+            recipients = [f"{email}"]
+            password =os.getenv('SMTP_APP_PASSWORD_GOOGLE')
+            response=send_email_user(subject, html_body, sender, recipients, password)
+            return response
+        else:
+            response={"code":"EMAIL_DONT_EXIST"}
+            return response
         
     
 async def preVerifyToSendEmail(customer: CustomerModel):
